@@ -29,13 +29,13 @@ import site.ycsb.DB;
 import site.ycsb.DBException;
 import site.ycsb.Status;
 import site.ycsb.StringByteIterator;
-import redis.clients.jedis.BasicCommands;
+import redis.clients.jedis.commands.*;
 import redis.clients.jedis.HostAndPort;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisCluster;
-import redis.clients.jedis.JedisCommands;
+import redis.clients.jedis.*;
 import redis.clients.jedis.Protocol;
-
+import redis.clients.jedis.JedisPoolConfig;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.HashMap;
@@ -46,6 +46,10 @@ import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import java.util.Vector;
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.SSLParameters;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.SSLSocketFactory;
 
 /**
  * YCSB binding for <a href="http://redis.io/">Redis</a>.
@@ -54,14 +58,24 @@ import java.util.Vector;
  */
 public class RedisClient extends DB {
 
-  private JedisCommands jedis;
-
+//   private JedisCommands jedis;
+  private JedisCluster jedis;
+  private Jedis jediss;
   public static final String HOST_PROPERTY = "redis.host";
   public static final String PORT_PROPERTY = "redis.port";
   public static final String PASSWORD_PROPERTY = "redis.password";
   public static final String CLUSTER_PROPERTY = "redis.cluster";
-
+  private static final int DEFAULT_TIMEOUT = 2000;
+  private static final int DEFAULT_REDIRECTIONS = 5;
+  private static final JedisPoolConfig DEFAULT_CONFIG = new JedisPoolConfig();
   public static final String INDEX_KEY = "_indices";
+  private static final SSLParameters SSL_PARAMS = new SSLParameters();
+  private static final SSLSocketFactory SSL_SOCKET = (SSLSocketFactory) SSLSocketFactory.getDefault();
+  private static HostnameVerifier hostnameVerifier = new HostnameVerifier() {
+    public boolean verify(String s, SSLSession sslSession) { 
+      return true;
+    }
+    };
 
   public void init() throws DBException {
     Properties props = getProperties();
@@ -79,16 +93,18 @@ public class RedisClient extends DB {
     if (clusterEnabled) {
       Set<HostAndPort> jedisClusterNodes = new HashSet<>();
       jedisClusterNodes.add(new HostAndPort(host, port));
-      jedis = new JedisCluster(jedisClusterNodes);
+      String password = props.getProperty(PASSWORD_PROPERTY);
+      jedis = new JedisCluster(jedisClusterNodes, DEFAULT_TIMEOUT, DEFAULT_TIMEOUT, DEFAULT_REDIRECTIONS,
+      password, null, DEFAULT_CONFIG, true, SSL_SOCKET, SSL_PARAMS, hostnameVerifier, null);
     } else {
-      jedis = new Jedis(host, port);
-      ((Jedis) jedis).connect();
+      jediss = new Jedis(host, port);
+      ((Jedis) jediss).connect();
     }
 
-    String password = props.getProperty(PASSWORD_PROPERTY);
-    if (password != null) {
-      ((BasicCommands) jedis).auth(password);
-    }
+    // String password = props.getProperty(PASSWORD_PROPERTY);
+    // if (password != null) {
+    //   ((BasicCommands) jedis).auth(password);
+    // }
   }
 
   public void cleanup() throws DBException {
